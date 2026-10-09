@@ -140,6 +140,79 @@ MV7+ 直接錄音只有約 -91 dBFS，可能係靜音或增益問題，之後要
 - 測試模式（`--test-wav`）四語言對答、打斷、暫停／恢復都正常；預熱後非首輪延遲約 1.6–2.3 秒（未計虛擬咪同 Discord）。
 - 全部載入後 GPU 用量約 13.9／16 GiB（包括系統約 1.4 GiB）。
 
+## 真人試用回饋：講太長、成日被搶話（2026-10-09）
+
+- 回覆長度：系統提示改為「最多 N 句」，各語言加每句長度限制（中 20 字、日 25 字、英 15 詞）；`max_tokens` 由 120 改為 40×N；程式講夠 N 句即刻停。控制台可揀 1–3 句，預設 2。
+- 打斷分兩個階段：
+  - AI 未出聲（ASR／LLM／TTS 中）對方再講 ≥300 ms：當對方未講完，撤回今次回覆，同下一段合併再答。
+  - AI 講緊：對方要講夠 `barge_in_ms`（預設 700 ms，控制台 0.3–2 秒）先打斷；「嗯」「哦」、笑聲唔會打斷。
+- 修 bug：之前取消開關喺 ASR 完先建立，ASR 期間對方開口嘅打斷會失效，AI 照答前半句同對方撞埋講。改為每輪自己嘅取消開關。
+- 控制台顯示打斷原因（「對方未講完，已同下一句合併」／「被打斷（對方講咗 X 秒）」）。
+- 測試模式：句中停 0.9 秒嘅樣本、普通話兩段、英文兩段都成功合併；回覆變為一兩句短句；延遲 1.3–1.8 秒。AI 講緊時被打斷嘅情況未喺真人測試驗證。
+- 測試用 `--play-device` 臨時覆蓋唔再寫入 `config/settings.json`。
+
+## 準確度同加速（2026-10-09 後段）
+
+用戶回饋：對方講普通話、鎖定日文回覆會出錯；要求提高準確度同加速；介面用書面詞、英文為主。
+
+**準確度**
+- 重現（[spike/cross_lang_check.py](../spike/cross_lang_check.py)）：鎖定日文時 LLM 跟咗對方語言（普通話、廣東話、英文），再由 TTS 用日文讀中文句，讀錯（「有空」聽成「有課」）。原因：語言規則只喺系統提示末尾。
+- 修正：每次送 LLM 時喺最後一句對方說話後加目標語言提示（例如「（必ず日本語で返事してください）」），唔入對話紀錄。之後鎖定日文、廣東話、普通話、英文，對方用其他三種語言都跟足鎖定語言。
+- TTS 按句子實際文字揀語言（有假名用日文、純拉丁字母用英文），避免用錯語言讀。
+- ASR 中文輸出由簡體轉繁體顯示（廣東話 `s2hk`、普通話 `s2tw`；`s2t` 會將「吃」轉成「喫」所以唔用）。
+
+**加速**
+- ASR 改用 llama.cpp（ggml-org `Qwen3-ASR-1.7B-Q8_0.gguf`＋`mmproj`，放 `models/gguf/asr/`）：12 句樣本輸出同 transformers 版一樣，每句由約 480 ms 降到中位數 104 ms、最差 128 ms（[spike/asr_llamacpp_bench.py](../spike/asr_llamacpp_bench.py)）；VRAM 約 2.4 GiB（原本 3.9 GiB）。
+- TTS 由 16 步改 12 步：每句 374 → 273 ms，ASR 反向檢查四語言語言判斷全對、錯誤率不變；10 步 226 ms 亦可，但距離 8 步失敗太近，暫用 12。
+- 提早開始：對方靜音達 `end_ms - 300 ms`（最少 200 ms）就開始 ASR／LLM／TTS，但等靜音達 `end_ms` 確認先顯示同播放；期間對方再講就作廢（VAD 累積成句，下次連前半句一齊辨識）。每輪慳約 320 ms。
+- 結果（測試模式，end_ms 550）：**對方停口 → AI 開始播 0.71–0.93 秒**（之前 1.5–2.3 秒），未計虛擬咪約 300 ms 同 Discord 傳送。
+
+**對話行為**
+- AI 講緊嘢時對方開始講、但未夠打斷門檻（附和「嗯」「哦」、笑聲）：唔當新一輪，唔回應。
+- 回覆播緊時被打斷：介面補報「Interrupted after X s」，對話紀錄標記未講完。
+- 太短嘅聲音被丟棄時重設「對方講緊嘢」狀態（之前會卡住）。
+- 測試：barge.wav（AI 講緊時對方插入長句）成功打斷；backchannel.wav（AI 講緊時「嗯」）冇觸發回應。
+
+**介面**：改為英文為主、書面用詞；修正「Monitor AI voice」關閉時選項仍顯示（`[hidden]` 被 `display:grid` 蓋過）。
+
+**其他**：llama-server（LLM、ASR）log 寫 `logs/llm.log`、`logs/asr.log`。全部載入後 GPU 約 12.8／16 GiB（包括系統）。
+
+## 角色（性格）
+
+用戶決定：AI 以**用戶本人**身份講嘢，但可以切換唔同性格；聲線先用 OmniVoice voice design。
+
+- 個人資料（Profile：名、簡介、資料）所有性格共用，存 `config/profile.json`（唔入 git）。
+- 性格（Personality：說話方式、口頭禪〔按語言〕、聲線〔性別、年齡、音高、耳語、語速 0.8–1.3〕）：預設 Natural、Cheerful、Calm、Playful 喺 [app/personas/](../app/personas/)；用戶修改存 `config/personas/<id>.json` 覆蓋預設，可以「Restore default」。模組：[app/personas.py](../app/personas.py)。
+- 系統提示次序：角色提示（英文）→ 技術規則（長度、格式）→ 語言規則；技術規則喺後面，角色設定推翻唔到長度同語言要求。口頭禪只放當時回覆語言嗰組。
+- 聲線值只接受 OmniVoice voice design 支援嘅選項（控制台用下拉選單），避免 instruct 錯誤令合成失敗。
+- 切換性格或修改個人資料會清空對話紀錄（避免前一個性格嘅說話影響新性格）。
+- 「Preview voice」只喺監聽裝置（或 Windows 預設輸出）播，唔送 Discord；用表格入面未儲存嘅聲線設定。
+- 測試：四個性格載入正常；Cheerful 回覆明顯較興奮（「好呀！」「土曜は空いてるよ！」），四語言仍跟回覆語言；個人資料儲存／還原正常；非法 id（例如 `../evil`）被拒絕。
+- 修正：語速加快時好短嘅句子（例如「對不起，」）OmniVoice 估計長度變 0 而失敗，改為失敗時用正常語速重試。
+
+## 多人：講者辨識同群組模式
+
+**講者聲紋模型比較**（[spike/speaker_bench.py](../spike/speaker_bench.py)；sherpa-onnx CPU 2 threads；Windows SAPI 5 把聲、每人 4 長句＋2 短句）
+
+| 模型 | 每句 | 同一人最低／唔同人最高相似度 | 即時分組（門檻 0.5） |
+| --- | --- | --- | --- |
+| **3D-Speaker CAM++ zh_en advanced** | **18 ms** | 0.82／0.45 | **5 組全對** |
+| 3D-Speaker ERes2NetV2 zh | 84 ms | 0.85／0.60 | 85% |
+| WeSpeaker ResNet34 en | 33 ms | 0.79／0.68 | 45% |
+
+選 CAM++（[app/speakers.py](../app/speakers.py)，模型放 `models/speaker/`）。SAPI 聲音差異大，真人同性別同語言會難好多，所以預設門檻 0.55，控制台可調，亦可以改名同合併講者。少過 1 秒嘅句子唔開新講者。聲紋只放記憶體，停 AI 模式即清除。
+
+注意：`sherpa-onnx` 1.13.8 喺 uv 下冇自動裝 `sherpa-onnx-core`，會誤用 Windows 自帶嘅舊 `System32\onnxruntime.dll`（1.17，報「API version [28] is not available」）；要另外加 `sherpa-onnx-core==1.13.8`。
+
+**群組模式**（控制台「Group chat」）
+- 每句前面加講者名送 LLM（例如「Speaker 2: …」），系統提示講明係群組。
+- 只喺叫你個名或者暱稱（「About you → Also called」）時回應；比較前統一簡體、細楷、去空格，「亞／阿」當同一字（ASR 會將「阿明」寫成「亞明」）。
+- 選「Called by name, or an open question nobody answers」時：冇叫名嘅句子等 1.2 秒都冇人開口，再用 LLM 判斷（yes／no）係咪公開問題、適合你答。
+- 冇回應嘅句子都記入對話做上下文（群組保留 20 句）。
+- AI 準備回覆期間有人開口：群組模式放棄回覆（「Someone else spoke」），**唔合併**（一對一先合併；之前會將 David 嘅問題併入 Zira 嗰句兼標錯講者）。
+- 模型喺回覆開頭加「名字:」會自動刪走。
+- 測試（[spike/out/group](../spike/out/group)，SAPI 三把聲；Ming／阿明）：講者 3 人全對；公開問題有人答 → 放棄；冇叫名 → 只聽；叫名（英文、「亞明」）→ 即時回應；冇人答嘅公開問題 → 等約 1.6 秒後回應。
+
 ## VRAM 小計（實測）
 
 ASR 1.7B 3.9 GiB ＋ LLM 9B 5.6 GiB ＋ TTS 2.0 GiB ＝ 11.5 GiB；加系統已用約 1.8 GiB，約 13.3／16 GiB。三個同時運行時嘅 GPU 爭用未測。

@@ -20,6 +20,8 @@ asr = [
     "librosa>=0.10",
     "opencc-python-reimplemented>=0.1.7",
     "silero-vad>=6.2.3",
+    "sherpa-onnx>=1.13.8",
+    "sherpa-onnx-core==1.13.8",
 ]
 
 [[tool.uv.index]]

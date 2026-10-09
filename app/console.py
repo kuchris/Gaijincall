@@ -59,6 +59,10 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/devices":
             self._json({"outputs": output_device_names(), "default_output": default_output_name(),
                         "hotkey": HOTKEY_LABEL, "hotkey_ok": hotkey_ok})
+        elif self.path == "/api/personas":
+            self._json(engine.personas_info())
+        elif self.path == "/api/speakers":
+            self._json(engine.speakers_info())
         elif self.path == "/events":
             self._events()
         else:
@@ -80,6 +84,32 @@ class Handler(BaseHTTPRequestHandler):
             engine.set_paused(bool(data.get("paused", not engine.paused)))
         elif self.path == "/api/settings":
             engine.update_settings(data)
+        elif self.path in ("/api/persona", "/api/persona/reset", "/api/profile", "/api/preview"):
+            try:
+                if self.path == "/api/persona":
+                    engine.save_persona(data)
+                elif self.path == "/api/persona/reset":
+                    engine.reset_persona(str(data.get("id", "")))
+                elif self.path == "/api/profile":
+                    engine.save_profile(data)
+                else:
+                    engine.preview_voice(str(data.get("persona", "")), str(data.get("lang", "")), data.get("voice"))
+            except (ValueError, TypeError, KeyError) as e:
+                return self._json({"error": str(e)}, 400)
+            return self._json(engine.personas_info())
+        elif self.path in ("/api/speaker/rename", "/api/speaker/merge", "/api/speakers/reset"):
+            if engine.state == "loading":
+                return self._json({"error": "Still loading"}, 409)
+            try:
+                if self.path == "/api/speaker/rename":
+                    engine.rename_speaker(int(data["id"]), str(data.get("name", "")))
+                elif self.path == "/api/speaker/merge":
+                    engine.merge_speakers(int(data["keep"]), int(data["drop"]))
+                else:
+                    engine.reset_speakers()
+            except (ValueError, TypeError, KeyError) as e:
+                return self._json({"error": str(e)}, 400)
+            return self._json(engine.speakers_info())
         else:
             return self.send_error(404)
         self._json(engine.snapshot())
@@ -110,8 +140,14 @@ def main():
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--test-wav", nargs="*", default=[], help="測試模式：用呢啲 WAV 扮對方，唔收 Discord")
+    parser.add_argument("--play-device", help="今次運行改用呢個輸出裝置並關閉監聽（唔寫入設定檔，測試用）")
+    parser.add_argument("--monitor-device", help="今次運行嘅監聽／試聽裝置（唔寫入設定檔，測試用）")
     args = parser.parse_args()
     test_wavs = args.test_wav
+    if args.play_device:
+        engine.override_settings(play_device=args.play_device, monitor_on=False)
+    if args.monitor_device:
+        engine.override_settings(monitor_device=args.monitor_device)
     if not jobobject.kill_children_on_exit():
         print("⚠ 未能設定 Job Object：控制台被強制關閉時，子 process 可能殘留霸住 VRAM", flush=True)
     ALLOWED_HOSTS.update({f"127.0.0.1:{args.port}", f"localhost:{args.port}"})

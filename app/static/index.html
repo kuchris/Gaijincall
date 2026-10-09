@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="zh-Hant">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Gaijincall 控制台</title>
+<title>Gaijincall Console</title>
 <style>
   :root {
     --bg: #f6f5f2; --card: #ffffff; --text: #1d1d1f; --muted: #6b6b70; --line: #e4e2dd;
@@ -20,13 +20,14 @@
     }
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body { margin: 0; background: var(--bg); color: var(--text);
-         font: 15px/1.55 "Microsoft JhengHei UI", "Noto Sans TC", system-ui, sans-serif; }
+         font: 15px/1.55 "Segoe UI", "Microsoft JhengHei UI", "Noto Sans TC", system-ui, sans-serif; }
   main { max-width: 980px; margin: 0 auto; padding: 20px 16px 40px; display: grid; gap: 16px;
          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   header { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
   h1 { font-size: 20px; margin: 0; }
-  h2 { font-size: 15px; margin: 0 0 12px; color: var(--muted); font-weight: 600; }
+  h2 { font-size: 13px; margin: 0 0 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
   .wide { grid-column: 1 / -1; }
   @media (max-width: 720px) { main { grid-template-columns: 1fr; } }
@@ -53,14 +54,26 @@
   .row:last-child { margin-bottom: 0; }
   label.title { font-weight: 600; }
   .hint { color: var(--muted); font-size: 13px; }
-  select, input[type=range] { width: 100%; font: inherit; }
-  select { padding: 7px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); }
+  select, input[type=range], input:not([type]), textarea { width: 100%; font: inherit; }
+  select, input:not([type]), textarea { padding: 7px 8px; border-radius: 8px; border: 1px solid var(--line);
+                                         background: var(--card); color: var(--text); }
+  textarea { resize: vertical; }
+  select.inline { width: auto; }
+  .grid2 { display: grid; gap: 6px; grid-template-columns: 1fr 1fr; }
+  .grid3 { display: grid; gap: 6px; grid-template-columns: 1fr 1fr 1fr; }
+  @media (max-width: 480px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+  .group-grid { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  @media (max-width: 720px) { .group-grid { grid-template-columns: 1fr; } }
+  .spk-list { display: grid; gap: 8px; }
+  .spk { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; align-items: center; }
+  .spk .count { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .turn.listen .user { opacity: .75; }
   .seg { display: flex; flex-wrap: wrap; gap: 6px; }
   .seg button { padding: 6px 12px; }
   .seg button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
   .switch { display: flex; align-items: center; gap: 8px; cursor: pointer; }
   .switch input { width: 18px; height: 18px; }
-  .monitor-opts[hidden] { display: none !important; }
+  .value { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 400; }
 
   .log { display: grid; gap: 10px; max-height: 60vh; overflow-y: auto; }
   .turn { border-top: 1px solid var(--line); padding-top: 10px; }
@@ -69,10 +82,10 @@
   .ai .who { color: var(--accent); }
   .tag { font-size: 12px; background: var(--chip); border-radius: 999px; padding: 1px 8px; margin-left: 6px; color: var(--muted); }
   .lat { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-  .lat span { font-size: 12px; background: var(--chip); border-radius: 6px; padding: 2px 7px; color: var(--muted); }
+  .lat span { font-size: 12px; background: var(--chip); border-radius: 6px; padding: 2px 7px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .lat span.total { color: var(--text); font-weight: 700; }
   .empty { color: var(--muted); }
-  .log-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .log-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 12px; }
   .log-head h2 { margin: 0; }
   .log-head button { padding: 4px 10px; font-size: 13px; }
 </style>
@@ -80,71 +93,196 @@
 <body>
 <main>
   <header>
-    <h1>Gaijincall 控制台</h1>
-    <span class="hint">本機語音助手 · 唔會儲存錄音或對話紀錄</span>
+    <h1>Gaijincall Console</h1>
+    <span class="hint">Local voice assistant · No audio or transcripts are saved</span>
   </header>
 
   <section class="card">
-    <h2>狀態</h2>
-    <div class="state" id="state" data-s="loading"><span class="dot"></span><span id="stateText">載入中</span></div>
+    <h2>Status</h2>
+    <div class="state" id="state" data-s="loading"><span class="dot"></span><span id="stateText">Loading</span></div>
     <div class="sub" id="stateSub"></div>
     <div class="error" id="error" hidden></div>
     <div class="buttons">
-      <button class="primary" id="toggle" disabled>啟用 AI 模式</button>
-      <button id="pause" disabled>暫停</button>
+      <button class="primary" id="toggle" disabled>Start AI mode</button>
+      <button id="pause" disabled>Pause</button>
     </div>
     <p class="hint" id="hotkeyHint"></p>
   </section>
 
   <section class="card">
-    <h2>設定</h2>
+    <h2>Settings</h2>
     <div class="row">
-      <label class="title">回覆語言</label>
+      <label class="title">Reply language</label>
       <div class="seg" id="langSeg">
-        <button data-lang="auto">自動跟對方</button>
-        <button data-lang="yue">廣東話</button>
-        <button data-lang="cmn">普通話</button>
-        <button data-lang="ja">日文</button>
-        <button data-lang="en">英文</button>
+        <button data-lang="auto">Auto (match speaker)</button>
+        <button data-lang="yue">Cantonese 粵</button>
+        <button data-lang="cmn">Mandarin 普</button>
+        <button data-lang="ja">Japanese 日</button>
+        <button data-lang="en">English</button>
       </div>
     </div>
     <div class="row">
-      <label class="title" for="playDevice">AI 聲音送去（Discord 嘅咪要揀對應嘅虛擬裝置）</label>
+      <label class="title" for="playDevice">AI voice output</label>
       <select id="playDevice"></select>
+      <span class="hint">Set the Discord microphone to the matching virtual device.</span>
     </div>
     <div class="row">
-      <label class="switch"><input type="checkbox" id="monitorOn"> <span class="title">我都要聽到 AI 把聲</span></label>
-      <div class="monitor-opts row" id="monitorOpts" hidden>
+      <label class="switch"><input type="checkbox" id="monitorOn"> <span class="title">Monitor AI voice</span></label>
+      <div class="row" id="monitorOpts" hidden>
         <select id="monitorDevice"></select>
-        <label class="hint" for="monitorVolume">監聽音量 <span id="monitorVolumeText"></span></label>
+        <label class="hint" for="monitorVolume">Monitor volume <span class="value" id="monitorVolumeText"></span></label>
         <input type="range" id="monitorVolume" min="0" max="150" step="5">
       </div>
     </div>
     <div class="row">
-      <label class="title" for="endMs">靜音幾耐當對方講完：<span id="endMsText"></span></label>
+      <label class="title" for="endMs">End-of-speech silence <span class="value" id="endMsText"></span></label>
       <input type="range" id="endMs" min="300" max="1500" step="50">
-      <span class="hint">越短回應越快，但對方停一停諗嘢都可能會被搶話。</span>
+      <span class="hint">Shorter responds faster but may cut in during pauses. If the speaker continues before the AI starts talking, both parts are merged.</span>
+    </div>
+    <div class="row">
+      <label class="title" for="bargeMs">Interrupt threshold <span class="value" id="bargeMsText"></span></label>
+      <input type="range" id="bargeMs" min="300" max="2000" step="100">
+      <span class="hint">How long the speaker must talk to stop the AI. Short backchannels and laughter below this are ignored.</span>
+    </div>
+    <div class="row">
+      <label class="title">Maximum sentences per reply</label>
+      <div class="seg" id="sentSeg">
+        <button data-n="1">1</button>
+        <button data-n="2">2</button>
+        <button data-n="3">3</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Personality</h2>
+    <div class="row">
+      <label class="title" for="personaSelect">Active personality</label>
+      <select id="personaSelect"></select>
+      <span class="hint">The AI speaks as you. Switching personality starts a new conversation context.</span>
+    </div>
+    <div class="row">
+      <label class="title" for="pLabel">Name</label>
+      <input id="pLabel" maxlength="40">
+    </div>
+    <div class="row">
+      <label class="title" for="pPersonality">Personality</label>
+      <textarea id="pPersonality" rows="2" maxlength="600" placeholder="e.g. Relaxed and friendly, interested in what friends say."></textarea>
+    </div>
+    <div class="row">
+      <label class="title" for="pStyle">Speaking style</label>
+      <textarea id="pStyle" rows="2" maxlength="600" placeholder="e.g. Casual, short reactions, occasional follow-up questions."></textarea>
+    </div>
+    <div class="row">
+      <label class="title">Catchphrases <span class="value">(comma separated, optional)</span></label>
+      <div class="grid2">
+        <input id="pPhrase-yue" placeholder="Cantonese">
+        <input id="pPhrase-cmn" placeholder="Mandarin">
+        <input id="pPhrase-ja" placeholder="Japanese">
+        <input id="pPhrase-en" placeholder="English">
+      </div>
+      <span class="hint">Write personality and style in English for the most reliable language control.</span>
+    </div>
+    <div class="row">
+      <label class="title">Voice</label>
+      <div class="grid3">
+        <select id="vGender" aria-label="Gender"></select>
+        <select id="vAge" aria-label="Age"></select>
+        <select id="vPitch" aria-label="Pitch"></select>
+      </div>
+      <label class="switch"><input type="checkbox" id="vWhisper"> <span>Whisper</span></label>
+      <label class="hint" for="vSpeed">Speaking rate <span class="value" id="vSpeedText"></span></label>
+      <input type="range" id="vSpeed" step="0.05">
+    </div>
+    <div class="buttons">
+      <button class="primary" id="pSave">Save personality</button>
+      <select id="previewLang" aria-label="Preview language" class="inline">
+        <option value="yue">Cantonese</option><option value="cmn">Mandarin</option>
+        <option value="ja">Japanese</option><option value="en">English</option>
+      </select>
+      <button id="pPreview">Preview voice</button>
+      <button id="pReset" hidden>Restore default</button>
+    </div>
+    <p class="hint">Preview plays on the monitor device (or the Windows default output), never to Discord.</p>
+    <p class="hint" id="pStatus"></p>
+  </section>
+
+  <section class="card">
+    <h2>About you</h2>
+    <p class="hint">Shared by every personality. Leave blank if you prefer.</p>
+    <div class="row">
+      <label class="title" for="profName">Your name</label>
+      <input id="profName" maxlength="40" placeholder="Name your friends call you">
+    </div>
+    <div class="row">
+      <label class="title" for="profNicknames">Also called <span class="value">(comma separated)</span></label>
+      <input id="profNicknames" maxlength="200" placeholder="Nicknames friends use, in any language">
+      <span class="hint">Group mode replies when your name or a nickname is mentioned.</span>
+    </div>
+    <div class="row">
+      <label class="title" for="profAbout">About you</label>
+      <textarea id="profAbout" rows="3" maxlength="600" placeholder="e.g. Lives in Tokyo, works in IT, plays FPS games at night."></textarea>
+    </div>
+    <div class="row">
+      <label class="title" for="profFacts">Facts <span class="value">(one per line)</span></label>
+      <textarea id="profFacts" rows="4" placeholder="e.g. Has a cat named Mochi"></textarea>
+    </div>
+    <div class="buttons">
+      <button class="primary" id="profSave">Save profile</button>
+    </div>
+    <p class="hint" id="profStatus"></p>
+  </section>
+
+  <section class="card wide">
+    <h2>Group chat</h2>
+    <div class="group-grid">
+      <div>
+        <div class="row">
+          <label class="switch"><input type="checkbox" id="groupMode"> <span class="title">Group mode</span></label>
+          <span class="hint">For voice channels with several people. Every turn is still heard and kept as context.</span>
+        </div>
+        <div class="row">
+          <label class="title">Reply when</label>
+          <div class="seg" id="groupReplySeg">
+            <button data-reply="name">Called by name</button>
+            <button data-reply="open">Called by name, or an open question nobody answers</button>
+          </div>
+        </div>
+        <div class="row">
+          <label class="title" for="spkThreshold">Speaker match threshold <span class="value" id="spkThresholdText"></span></label>
+          <input type="range" id="spkThreshold" min="0.3" max="0.85" step="0.05">
+          <span class="hint">Higher splits similar voices apart; lower merges them. Voiceprints stay in memory only and are cleared when AI mode stops.</span>
+        </div>
+      </div>
+      <div>
+        <div class="log-head">
+          <label class="title">Speakers this session</label>
+          <button id="spkReset">Reset</button>
+        </div>
+        <div id="spkList" class="spk-list"><p class="empty">No speakers yet.</p></div>
+      </div>
     </div>
   </section>
 
   <section class="card wide">
     <div class="log-head">
-      <h2>今次對話</h2>
-      <button id="clearLog">清除畫面</button>
+      <h2>Conversation</h2>
+      <button id="clearLog">Clear</button>
     </div>
-    <div class="log" id="log"><p class="empty" id="emptyLog">未有對話。</p></div>
+    <div class="log" id="log"><p class="empty" id="emptyLog">No conversation yet.</p></div>
   </section>
 </main>
 
 <script>
-const LANG = { yue: "粵", cmn: "國", ja: "日", en: "英" };
+const LANG = { yue: "Cantonese", cmn: "Mandarin", ja: "Japanese", en: "English" };
 const STATE_TEXT = {
-  loading: "載入中", off: "未啟用", listening: "收聽中", hearing: "對方講緊嘢",
-  thinking: "諗緊點答", speaking: "AI 講緊嘢", paused: "已暫停",
+  loading: "Loading", off: "Off", listening: "Listening", hearing: "Speaker talking",
+  thinking: "Preparing reply", speaking: "AI speaking", paused: "Paused",
 };
 let current = null;
 let defaultOutput = "";
 const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 async function post(path, body = {}) {
   const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -156,19 +294,19 @@ function render(s) {
   $("state").dataset.s = s.state;
   $("stateText").textContent = STATE_TEXT[s.state] || s.state;
   let sub = "";
-  if (s.state === "loading") sub = s.load_step ? `${s.load_step}……` : "準備緊";
-  else if (s.enabled && s.lang) sub = `而家用${{ yue: "廣東話", cmn: "普通話", ja: "日文", en: "英文" }[s.lang]}回覆`;
-  else if (!s.enabled) sub = "撳「啟用 AI 模式」開始收聽 Discord";
+  if (s.state === "loading") sub = s.load_step ? `${s.load_step}…` : "Starting…";
+  else if (s.enabled && s.lang) sub = `Replying in ${LANG[s.lang]}`;
+  else if (!s.enabled) sub = "Press Start AI mode to listen to Discord.";
   $("stateSub").textContent = sub;
   $("error").hidden = !s.error;
   $("error").textContent = s.error || "";
 
   const loading = s.state === "loading";
   $("toggle").disabled = loading;
-  $("toggle").textContent = s.enabled ? "停止 AI 模式" : "啟用 AI 模式";
+  $("toggle").textContent = s.enabled ? "Stop AI mode" : "Start AI mode";
   $("toggle").classList.toggle("primary", !s.enabled);
   $("pause").disabled = loading || !s.enabled;
-  $("pause").textContent = s.paused ? "恢復" : "暫停";
+  $("pause").textContent = s.paused ? "Resume" : "Pause";
 
   const st = s.settings;
   for (const b of $("langSeg").children) b.setAttribute("aria-pressed", String(b.dataset.lang === st.lang));
@@ -179,7 +317,15 @@ function render(s) {
   if (document.activeElement !== $("monitorVolume")) $("monitorVolume").value = Math.round(st.monitor_volume * 100);
   $("monitorVolumeText").textContent = `${Math.round(st.monitor_volume * 100)}%`;
   if (document.activeElement !== $("endMs")) $("endMs").value = st.end_ms;
-  $("endMsText").textContent = `${(st.end_ms / 1000).toFixed(2)} 秒`;
+  $("endMsText").textContent = `${(st.end_ms / 1000).toFixed(2)} s`;
+  if (document.activeElement !== $("bargeMs")) $("bargeMs").value = st.barge_in_ms;
+  $("bargeMsText").textContent = `${(st.barge_in_ms / 1000).toFixed(1)} s`;
+  for (const b of $("sentSeg").children) b.setAttribute("aria-pressed", String(Number(b.dataset.n) === st.max_sentences));
+  $("groupMode").checked = st.group_mode;
+  for (const b of $("groupReplySeg").children) b.setAttribute("aria-pressed", String(b.dataset.reply === st.group_reply));
+  if (document.activeElement !== $("spkThreshold")) $("spkThreshold").value = st.speaker_threshold;
+  $("spkThresholdText").textContent = Number(st.speaker_threshold).toFixed(2);
+  if (personaInfo && st.persona !== personaInfo.active) loadPersonas();
 }
 
 async function loadDevices() {
@@ -187,25 +333,25 @@ async function loadDevices() {
   defaultOutput = d.default_output || "";
   const fill = (sel, withDefault) => {
     sel.innerHTML = "";
-    if (withDefault) sel.add(new Option(`Windows 預設（${defaultOutput || "未知"}）`, ""));
+    if (withDefault) sel.add(new Option(`Windows default (${defaultOutput || "unknown"})`, ""));
     for (const name of d.outputs) sel.add(new Option(name, name));
   };
   fill($("playDevice"), false);
   fill($("monitorDevice"), true);
   $("hotkeyHint").innerHTML = d.hotkey_ok
-    ? `全域快捷鍵 <kbd>${d.hotkey}</kbd>：暫停／恢復（喺 Discord 入面都用得）。暫停時 AI 唔會回應，你可以自己講。`
-    : `⚠ 快捷鍵 <kbd>${d.hotkey}</kbd> 註冊失敗，可能被其他程式佔用。`;
+    ? `Global hotkey <kbd>${esc(d.hotkey)}</kbd> pauses or resumes the AI, including while Discord is focused. While paused, the AI does not reply.`
+    : `Global hotkey <kbd>${esc(d.hotkey)}</kbd> could not be registered; another application may be using it.`;
   if (current) render(current);
 }
 
-// ---- 對話紀錄（只存喺呢個網頁，唔會儲存）----
+// ---- Conversation (kept in this page only; not saved) ----
 const turns = new Map();
 function turnEl(id) {
   if (!turns.has(id)) {
     $("emptyLog").hidden = true;
     const el = document.createElement("div");
     el.className = "turn";
-    el.innerHTML = `<div class="user"><span class="who">對方</span><span class="tag lang"></span><div class="text"></div></div>
+    el.innerHTML = `<div class="user"><span class="who">Speaker</span><span class="tag lang"></span><div class="text"></div></div>
       <div class="ai" hidden><span class="who">AI</span><span class="tag lang"></span><span class="tag note" hidden></span><div class="text"></div></div>
       <div class="lat"></div>`;
     $("log").prepend(el);
@@ -213,13 +359,23 @@ function turnEl(id) {
   }
   return turns.get(id);
 }
-const LAT_LABEL = { vad: "等靜音", asr: "辨識", llm_first: "對話模型", tts_first: "合成", play: "開始播" };
+const LAT_LABEL = { vad: "Silence", asr: "ASR", open_decided: "Group wait", llm_first: "LLM", tts_first: "TTS", play: "Playback" };
+const NOTE = {
+  listen: () => "Not addressed · listening only",
+  yield: () => "Someone else spoke · reply dropped",
+  continue: () => "Speaker continued · merged with next turn",
+  barge: e => `Interrupted after ${((e.barge_ms || 0) / 1000).toFixed(1)} s of speech`,
+  stop: () => "Paused or stopped",
+};
 
 function onEvent(e) {
   if (e.type === "state") return render(e);
+  if (e.type === "personas") return renderPersonas(e, { keepForm: true });
+  if (e.type === "speakers") return renderSpeakers(e.speakers);
   if (e.type === "turn_user") {
     const el = turnEl(e.id);
-    el.querySelector(".user .lang").textContent = e.detected ? LANG[e.detected] : "?";
+    el.querySelector(".user .who").textContent = e.speaker || "Speaker";
+    el.querySelector(".user .lang").textContent = e.detected ? LANG[e.detected] : "Unknown";
     el.querySelector(".user .text").textContent = e.text;
     el.querySelector(".ai .lang").textContent = LANG[e.reply_lang];
   } else if (e.type === "turn_reply") {
@@ -229,17 +385,25 @@ function onEvent(e) {
     if (e.done) {
       const note = ai.querySelector(".note");
       note.hidden = !e.interrupted;
-      note.textContent = "被打斷";
+      note.textContent = (NOTE[e.interrupted] || (() => "Interrupted"))(e);
+      el.classList.toggle("listen", e.interrupted === "listen");
+      if (e.interrupted === "listen") ai.querySelector(".lang").hidden = true;
       const lat = el.querySelector(".lat");
       lat.innerHTML = "";
       for (const [k, label] of Object.entries(LAT_LABEL))
         if (e.latency && k in e.latency) lat.insertAdjacentHTML("beforeend", `<span>${label} ${e.latency[k]} ms</span>`);
+      if (e.latency && e.latency.saved)
+        lat.insertAdjacentHTML("beforeend", `<span>Early start saved ${e.latency.saved} ms</span>`);
       if (e.latency && e.latency.total)
-        lat.insertAdjacentHTML("beforeend", `<span class="total">對方停口 → AI 出聲 ${(e.latency.total / 1000).toFixed(2)} 秒（未計虛擬咪同 Discord 傳送）</span>`);
+        lat.insertAdjacentHTML("beforeend", `<span class="total">Speech end → AI voice ${(e.latency.total / 1000).toFixed(2)} s (excl. virtual mic and Discord)</span>`);
     }
+  } else if (e.type === "turn_interrupted") {
+    const note = turnEl(e.id).querySelector(".ai .note");
+    note.hidden = false;
+    note.textContent = NOTE.barge(e);
   } else if (e.type === "turn_error") {
     const el = turnEl(e.id);
-    el.querySelector(".lat").innerHTML = `<span style="color:var(--bad)">出錯：${e.error}</span>`;
+    el.querySelector(".lat").innerHTML = `<span style="color:var(--bad)">Error: ${esc(e.error)}</span>`;
   }
 }
 
@@ -251,17 +415,145 @@ function connect() {
 
 $("toggle").onclick = () => post(current && current.enabled ? "/api/disable" : "/api/enable");
 $("pause").onclick = () => post("/api/pause", { paused: !(current && current.paused) });
-$("langSeg").onclick = e => { if (e.target.dataset.lang) post("/api/settings", { lang: e.target.dataset.lang }); };
+$("langSeg").onclick = e => { const b = e.target.closest("button"); if (b) post("/api/settings", { lang: b.dataset.lang }); };
 $("playDevice").onchange = e => post("/api/settings", { play_device: e.target.value });
 $("monitorOn").onchange = e => post("/api/settings", { monitor_on: e.target.checked });
 $("monitorDevice").onchange = e => post("/api/settings", { monitor_device: e.target.value || null });
 $("monitorVolume").oninput = e => { $("monitorVolumeText").textContent = `${e.target.value}%`; };
 $("monitorVolume").onchange = e => post("/api/settings", { monitor_volume: e.target.value / 100 });
-$("endMs").oninput = e => { $("endMsText").textContent = `${(e.target.value / 1000).toFixed(2)} 秒`; };
+$("endMs").oninput = e => { $("endMsText").textContent = `${(e.target.value / 1000).toFixed(2)} s`; };
 $("endMs").onchange = e => post("/api/settings", { end_ms: Number(e.target.value) });
+$("bargeMs").oninput = e => { $("bargeMsText").textContent = `${(e.target.value / 1000).toFixed(1)} s`; };
+$("bargeMs").onchange = e => post("/api/settings", { barge_in_ms: Number(e.target.value) });
+$("sentSeg").onclick = e => { const b = e.target.closest("button"); if (b) post("/api/settings", { max_sentences: Number(b.dataset.n) }); };
 $("clearLog").onclick = () => { turns.clear(); $("log").replaceChildren($("emptyLog")); $("emptyLog").hidden = false; };
 
+// ---- Personality & profile ----
+let personaInfo = null;
+const LANGS = ["yue", "cmn", "ja", "en"];
+const activePersona = () => personaInfo && personaInfo.personas.find(p => p.id === personaInfo.active);
+
+function fillChoices(sel, values) {
+  if (sel.options.length) return;
+  for (const v of values) sel.add(new Option(v[0].toUpperCase() + v.slice(1), v));
+}
+
+function renderPersonas(info, { keepForm = false } = {}) {
+  personaInfo = info;
+  const sel = $("personaSelect");
+  sel.innerHTML = "";
+  for (const p of info.personas) sel.add(new Option(p.label + (p.customized ? " (edited)" : ""), p.id));
+  sel.value = info.active;
+  fillChoices($("vGender"), info.voice_choices.gender);
+  fillChoices($("vAge"), info.voice_choices.age);
+  fillChoices($("vPitch"), info.voice_choices.pitch);
+  $("vSpeed").min = info.speed_range[0];
+  $("vSpeed").max = info.speed_range[1];
+  const p = activePersona();
+  if (p && !keepForm) {
+    $("pLabel").value = p.label;
+    $("pPersonality").value = p.personality;
+    $("pStyle").value = p.speaking_style;
+    for (const l of LANGS) $(`pPhrase-${l}`).value = (p.catchphrases[l] || []).join(", ");
+    $("vGender").value = p.voice.gender;
+    $("vAge").value = p.voice.age;
+    $("vPitch").value = p.voice.pitch;
+    $("vWhisper").checked = p.voice.whisper;
+    $("vSpeed").value = p.voice.speed;
+    $("vSpeedText").textContent = `${Number(p.voice.speed).toFixed(2)}×`;
+  }
+  $("pReset").hidden = !(p && p.customized && info.defaults.includes(p.id));
+  if (!keepForm) {
+    $("profName").value = info.profile.name;
+    $("profNicknames").value = info.profile.nicknames.join(", ");
+    $("profAbout").value = info.profile.about;
+    $("profFacts").value = info.profile.facts.join("\n");
+  }
+}
+
+function formVoice() {
+  return { gender: $("vGender").value, age: $("vAge").value, pitch: $("vPitch").value,
+           whisper: $("vWhisper").checked, speed: Number($("vSpeed").value) };
+}
+
+async function postPersona(path, body, statusEl, message) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await r.json();
+  if (!r.ok) { statusEl.textContent = `Error: ${data.error}`; return null; }
+  if (message) statusEl.textContent = message;
+  return data;
+}
+
+async function loadPersonas() {
+  renderPersonas(await (await fetch("/api/personas")).json());
+}
+
+$("personaSelect").onchange = async e => {
+  await post("/api/settings", { persona: e.target.value });
+  await loadPersonas();
+  $("pStatus").textContent = "";
+};
+$("vSpeed").oninput = e => { $("vSpeedText").textContent = `${Number(e.target.value).toFixed(2)}×`; };
+$("pSave").onclick = async () => {
+  const p = activePersona();
+  const phrases = {};
+  for (const l of LANGS) phrases[l] = $(`pPhrase-${l}`).value.split(/[,，、]/).map(s => s.trim()).filter(Boolean);
+  const info = await postPersona("/api/persona", {
+    id: p.id, label: $("pLabel").value, personality: $("pPersonality").value,
+    speaking_style: $("pStyle").value, catchphrases: phrases, voice: formVoice(),
+  }, $("pStatus"), "Saved. Applies from the next reply.");
+  if (info) renderPersonas(info);
+};
+$("pPreview").onclick = () => {
+  postPersona("/api/preview", { persona: personaInfo.active, lang: $("previewLang").value, voice: formVoice() },
+              $("pStatus"), "Playing preview (unsaved voice settings are used)…");
+};
+$("pReset").onclick = async () => {
+  const info = await postPersona("/api/persona/reset", { id: personaInfo.active }, $("pStatus"), "Restored to default.");
+  if (info) renderPersonas(info);
+};
+$("profSave").onclick = async () => {
+  const info = await postPersona("/api/profile", {
+    name: $("profName").value, nicknames: $("profNicknames").value, about: $("profAbout").value, facts: $("profFacts").value,
+  }, $("profStatus"), "Saved. A new conversation context starts.");
+  if (info) renderPersonas(info);
+};
+
+// ---- Group chat & speakers ----
+function renderSpeakers(list) {
+  const box = $("spkList");
+  if (!list.length) { box.innerHTML = `<p class="empty">No speakers yet.</p>`; return; }
+  if (box.contains(document.activeElement)) return;   // 唔好打斷正在改名
+  box.innerHTML = "";
+  for (const s of list) {
+    const row = document.createElement("div");
+    row.className = "spk";
+    const others = list.filter(o => o.id !== s.id)
+      .map(o => `<option value="${o.id}">Merge into ${esc(o.name)}</option>`).join("");
+    row.innerHTML = `<input value="${esc(s.name)}" maxlength="30" aria-label="Speaker name">
+      <span class="count">${s.count} turn${s.count === 1 ? "" : "s"}</span>
+      <select aria-label="Merge" ${others ? "" : "disabled"}><option value="">Merge…</option>${others}</select>`;
+    const [input, , merge] = row.children;
+    input.onchange = () => postSpeakers("/api/speaker/rename", { id: s.id, name: input.value });
+    merge.onchange = () => { if (merge.value) postSpeakers("/api/speaker/merge", { keep: Number(merge.value), drop: s.id }); };
+    box.append(row);
+  }
+}
+
+async function postSpeakers(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (r.ok) { document.activeElement.blur(); renderSpeakers((await r.json()).speakers); }
+}
+
+$("groupMode").onchange = e => post("/api/settings", { group_mode: e.target.checked });
+$("groupReplySeg").onclick = e => { const b = e.target.closest("button"); if (b) post("/api/settings", { group_reply: b.dataset.reply }); };
+$("spkThreshold").oninput = e => { $("spkThresholdText").textContent = Number(e.target.value).toFixed(2); };
+$("spkThreshold").onchange = e => post("/api/settings", { speaker_threshold: Number(e.target.value) });
+$("spkReset").onclick = () => postSpeakers("/api/speakers/reset", {});
+
 loadDevices();
+loadPersonas();
+fetch("/api/speakers").then(r => r.json()).then(d => renderSpeakers(d.speakers));
 connect();
 </script>
 </body>
