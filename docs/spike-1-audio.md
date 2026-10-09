@@ -213,6 +213,66 @@ MV7+ 直接錄音只有約 -91 dBFS，可能係靜音或增益問題，之後要
 - 模型喺回覆開頭加「名字:」會自動刪走。
 - 測試（[spike/out/group](../spike/out/group)，SAPI 三把聲；Ming／阿明）：講者 3 人全對；公開問題有人答 → 放棄；冇叫名 → 只聽；叫名（英文、「亞明」）→ 即時回應；冇人答嘅公開問題 → 等約 1.6 秒後回應。
 
+## 串流 ASR（llama.cpp，LocalAgreement-2）
+
+Qwen3-ASR 官方串流只支援 vLLM（Linux），所以喺 llama.cpp 上面自己做：[app/streaming_asr.py](../app/streaming_asr.py)。每多 0.5 秒聲就重新辨識成段，連續兩次開頭一致嘅部分當已確定；已確定嘅字用 assistant prefill（`language X<asr_text>已確定文字`）填返，模型只生成後面。模組唔依賴 engine，其他項目可以直接用。
+
+實時模擬（[spike/streaming_asr_bench.py](../spike/streaming_asr_bench.py)；12 句 SAPI 樣本＋每語言 3 句接埋嘅長段 13–17 秒；1.7B Q8_0；未同 LLM／TTS 同時運行）：
+
+| | prefill | 冇 prefill |
+| --- | --- | --- |
+| 第一次出字 | 0.53 秒（= 等夠 0.5 秒聲＋辨識） | 0.52 秒 |
+| 每次辨識（短句／長段中位） | 60／82 ms | 69／129 ms |
+| 講完時已確定（短句中位） | 100% | 94% |
+| 講完時顯示同最終文字差別 | 0.4% | 0.4% |
+| 最後一次：填返已確定字 | **39／65 ms**（短／長），CER 2.4%（初版量到 16 ms 有偏差，見下） | 未重量，CER 2.0% |
+| 最後一次：成段重做 | 約 100 ms（獨立量），CER 2.0% | 同左 |
+
+- 講完嗰刻，畫面已經顯示到差唔多全句；CER 主要係「呀／啊」、「吓／下」呢類同音字，唔算真錯。
+- 填返已確定字快好多，但已確定嘅錯改唔返（ja-2「言っていいただけ」多咗一個「い」，CER 4.3%）；成段重做最準，標點都較自然。
+- 初版「填返 16 ms」係喺成段重做之後先量，llama-server 已經 cache 咗同一段聲嘅 prompt，所以偏快；改為先量填返（同 engine 次序一樣）係 39／65 ms。
+- 試過填返時留最尾 2 個字畀模型重寫（想修正上面重複「い」）：反而變「言っいただけ」漏字，CER 2.8%、64 ms，所以唔留。
+- GPU 用量：每 0.5 秒約 60–80 ms，即約 15%。長段每次辨識會隨長度增加（17 秒段最差 378 ms），長會議要按停頓切段。
+- 未測：真人錄音、雜音、同 LLM／TTS 爭 GPU。
+- 之後改咗「兩個都係標點就當一致」（SenseVoice 每次標點都唔同）；重測 Qwen 每次辨識 44／63 ms，其他不變。
+
+**接入 Gaijincall**（Qwen only）：
+- VAD 新增 on_audio，對方講緊嘢期間每塊聲交 StreamingASR；每句開始 eset()，暫停／停止後要等下一句開始先再串流。
+- 提早開始／確認講完時用 stream.transcribe(turn.audio, turn.segment)：同一段就填返已確定嘅字。
+- 控制台「Conversation」上面新增「Hearing」即時字幕：黑字已確定、灰字臨時；記入對話後自動收起。
+- 測試模式（yue-1、cmn-1、ja-2、en-2、pause-merge、backchannel）：每 0.5 秒更新一次字幕；ASR 一步 31–84 ms（之前約 100 ms）；**對方停口 → AI 開始播 0.70–0.87 秒**（之前 0.71–0.93 秒）。因為提早開始已經遮咗大部分 ASR 時間，總延遲只快約 40 ms。
+
+**SenseVoice-Small 比較**（[app/sensevoice.py](../app/sensevoice.py)，sherpa-onnx CPU int8，模型放 `models/sensevoice/`；[spike/sensevoice_bench.py](../spike/sensevoice_bench.py)）
+
+離線（每句一次；短句 12 句／長段 4 段；CER 平均）：
+
+| 條件 | Qwen3-ASR-1.7B（GPU） | SenseVoice 2024-07-17（CPU 4 threads） |
+| --- | --- | --- |
+| 速度（短句／長段中位） | 78／194 ms | **56／179 ms**（2 threads：86／291 ms） |
+| 記憶體 | VRAM 約 2.4 GiB | **RAM 約 270 MB，VRAM 0** |
+| 乾淨 | 2.0%／1.9% | 2.0%／2.2% |
+| 白噪音 10 dB | 3.4%／2.7% | 3.2%／2.6% |
+| 白噪音 0 dB | **5.5%／5.8%** | 8.9%／6.7% |
+| 背景人聲 10 dB | 2.4%／1.9% | 2.0%／4.2% |
+| 背景人聲 5 dB | 18.5%／**3.2%** | **4.7%**／14.7% |
+
+- 乾淨樣本兩個都差唔多全對（粵語 8% 主要係「呀／啊」同音字），SAPI 聲太易，分唔到高低。
+- 大雜音下各有弱點：Qwen 喺背景人聲 5 dB 時有 2 句日文**跟咗背景嗰把廣東話聲**（成句譯錯人）；SenseVoice 會漏字（英文長段漏一半），但唔會跟錯人。
+- `2025-09-09` 版（ASLP-lab 粵語微調）唔啱用：普通話、日文、英文都判斷成粵語，日文差唔多全錯（CER 82%），英文全大楷冇標點。
+- SenseVoice 日文會喺詞之間加空格，轉接層已刪。
+
+串流兩段式（SenseVoice CPU 出臨時字、Qwen3-ASR 出最終；step 0.5 秒）：
+
+| | 單一 Qwen（prefill） | SenseVoice＋Qwen |
+| --- | --- | --- |
+| 第一次出字 | 0.51 秒 | 0.50 秒 |
+| 每次臨時辨識（短／長） | 44／63 ms（GPU） | 36／93 ms（CPU） |
+| 講完時已確定（短／長） | 100%／100% | 94%／65% |
+| 講完到最終文字（短／長） | 填返 39／65 ms；重做 113／238 ms | 重做 130／436 ms |
+
+- Gaijincall 用單一 Qwen 較好：已確定比例高、可以填返，最後一步最快；SenseVoice 慳嘅只係 GPU 時間。
+- 會議 app：如果要慳 VRAM 或者部機冇強 GPU，SenseVoice 單獨用已經夠（準確度喺乾淨同中等雜音下同 Qwen 相若，只用 CPU）；要最準就講完一段再交 Qwen。
+
 ## VRAM 小計（實測）
 
 ASR 1.7B 3.9 GiB ＋ LLM 9B 5.6 GiB ＋ TTS 2.0 GiB ＝ 11.5 GiB；加系統已用約 1.8 GiB，約 13.3／16 GiB。三個同時運行時嘅 GPU 爭用未測。

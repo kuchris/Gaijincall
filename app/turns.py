@@ -32,16 +32,18 @@ class TurnDetector:
     on_resume()：on_pause 之後對方再講（提早準備要作廢）
     on_turn_end(audio)：靜音達 end_ms，確認講完；audio 係成句（含 pre-roll）
     on_discard()：講完但太短（咳、「嗯」、提示音），唔當一輪
+    on_audio(chunk)：今句嘅聲一到就交出（開始時連 pre-roll），串流辨識用；全部接埋 = on_pause／on_turn_end 嘅 audio
     """
 
     def __init__(self, on_speech_start: Callable[[], None], on_speech: Callable[[float], None],
                  on_turn_end: Callable[[np.ndarray], None], config: TurnConfig | None = None,
                  on_pause: Callable[[np.ndarray], None] | None = None, on_resume: Callable[[], None] | None = None,
-                 on_discard: Callable[[], None] | None = None):
+                 on_discard: Callable[[], None] | None = None, on_audio: Callable[[np.ndarray], None] | None = None):
         self.cfg = config or TurnConfig()
         self._model = load_silero_vad()
         self._on_speech_start, self._on_speech, self._on_turn_end = on_speech_start, on_speech, on_turn_end
         self._on_pause, self._on_resume, self._on_discard = on_pause, on_resume, on_discard
+        self._on_audio = on_audio
         self._pending = np.zeros(0, dtype=np.float32)
         self._preroll: list[np.ndarray] = []
         self._speech: list[np.ndarray] = []
@@ -70,10 +72,14 @@ class TurnDetector:
                 self._in_speech, self._speech = True, list(self._preroll)
                 self._speech_ms, self._silence_ms, self._paused_signalled = self._run_ms, 0.0, False
                 self._on_speech_start()
+                if self._on_audio:
+                    self._on_audio(np.concatenate(self._speech))
                 self._on_speech(self._speech_ms)
             return
 
         self._speech.append(chunk)
+        if self._on_audio:
+            self._on_audio(chunk)
         if prob >= cfg.end_prob:
             if self._paused_signalled:
                 self._paused_signalled = False

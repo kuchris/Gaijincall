@@ -83,6 +83,7 @@ class Turn:
     confirmed_at: float = 0.0
     cancel_reason: str | None = None   # continue（對方未講完）、barge（對方打斷）、stop（暫停／停止）、resume（提早開始作廢）
     barge_ms: float = 0.0
+    segment: int = 0                   # 串流辨識嘅段編號（同一段就可以填返已確定嘅字）
 
     def stop(self, reason: str, speech_ms: float = 0.0):
         if not self.cancel.is_set():
@@ -127,6 +128,7 @@ class Engine:
         self._early: Turn | None = None   # 提早開始、未確認講完嘅一輪
         self._carry = ""   # 對方未講完被合併嘅上一段文字
         self._turn_id = 0
+        self._segment = 0   # 目前呢句喺串流辨識嘅段編號
         self._hearing = False
         self._utt_over_ai = False
         self._utt_barged = False
@@ -277,11 +279,14 @@ class Engine:
         try:
             from asr import ASR
             from llm import LLM
+            from streaming_asr import StreamingASR
             from tts import TTS
             from turns import TurnConfig, TurnDetector
 
             self._step("Loading speech recognition (Qwen3-ASR)")
             self.asr = ASR()
+            # 講緊嘢期間每 0.5 秒重新辨識，即時顯示；講完時填返已確定嘅字，最後一步約 20 ms
+            self.stream = StreamingASR(self.asr, on_update=self._on_partial)
             self._step("Loading language model (Qwen3.5-9B)")
             self.llm = LLM()
             self._step("Loading speech synthesis (OmniVoice)")
@@ -299,6 +304,7 @@ class Engine:
                 self._on_speech_start, self._on_speech, self._on_turn_end,
                 TurnConfig(end_ms=self.settings.end_ms, early_ms=early_ms_for(self.settings.end_ms)),
                 on_pause=self._on_pause, on_resume=self._on_resume, on_discard=self._on_discard,
+                on_audio=self._on_audio,
             )
             threading.Thread(target=self._respond_loop, daemon=True).start()
             threading.Thread(target=self._state_ticker, daemon=True).start()
@@ -365,6 +371,9 @@ class Engine:
             self.capture = None
         self._stop_all("stop")
         self._hearing = False
+        self.stream.reset()
+        self._segment = -1   # 之後要等下一句開始先再串流（唔係成句都收到）
+        self._clear_partial()
         if getattr(self, "speakers", None):
             self.reset_speakers()   # 停 AI 模式即刻清除聲紋
         self._refresh_state()
@@ -375,6 +384,9 @@ class Engine:
         self.paused = paused
         if paused:
             self._stop_all("stop")
+            self.stream.reset()
+            self._segment = -1   # 之後要等下一句開始先再串流（唔係成句都收到）
+            self._clear_partial()
         self._refresh_state()
 
     def override_settings(self, **values):
@@ -416,13 +428,14 @@ class Engine:
 
     def close(self):
         self.disable()
-        for name in ("player", "tts", "llm", "asr"):
+        for name in ("player", "stream", "tts", "llm", "asr"):
             obj = getattr(self, name, None)
             if obj:
                 obj.close()
 
     # ---------- VAD 回調（收音 thread）----------
     def _on_speech_start(self):
+        self._segment = self.stream.reset()
         self._hearing = True
         # AI 講緊嘢時開始嘅說話：未夠打斷門檻就當附和（「嗯」「哦」、笑聲），唔回應
         self._utt_over_ai = bool(self.player and self.player.busy)
@@ -459,12 +472,24 @@ class Engine:
             turn.stop("continue", speech_ms)
             self.player.clear()
 
+    def _on_audio(self, chunk: np.ndarray):
+        if self.enabled and not self.paused and self._segment > 0:
+            self.stream.feed(chunk)
+
+    def _on_partial(self, p):
+        """串流辨識結果（ASR thread）：講緊嘢期間即時顯示；講完之後遲到嘅結果唔要。"""
+        if self._hearing and p.segment == self._segment:
+            self.emit({"type": "partial", "committed": p.committed, "tentative": p.tentative, "lang": p.lang})
+
+    def _clear_partial(self):
+        self.emit({"type": "partial", "committed": "", "tentative": "", "lang": None})
+
     def _is_backchannel(self) -> bool:
         return self._utt_over_ai and not self._utt_barged
 
     def _new_turn(self, audio: np.ndarray) -> Turn:
         self._turn_id += 1
-        turn = Turn(self._turn_id, audio, time.perf_counter())
+        turn = Turn(self._turn_id, audio, time.perf_counter(), segment=self._segment)
         self._turns.put(turn)
         return turn
 
@@ -479,9 +504,11 @@ class Engine:
 
     def _on_discard(self):
         self._hearing = False
+        self._clear_partial()
 
     def _on_turn_end(self, audio: np.ndarray):
         self._hearing = False
+        self._clear_partial()
         if not self.enabled or self.paused:
             return
         early, self._early = self._early, None
@@ -544,7 +571,7 @@ class Engine:
     def _respond(self, turn: Turn):
         self._current = turn
         times = turn.times
-        detected, text = self.asr.transcribe(turn.audio)
+        detected, text = self.stream.transcribe(turn.audio, turn.segment)
         times["asr"] = time.perf_counter()
         if not text or turn.cancel.is_set():
             return

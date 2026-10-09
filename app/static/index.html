@@ -85,6 +85,8 @@
   .lat span { font-size: 12px; background: var(--chip); border-radius: 6px; padding: 2px 7px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .lat span.total { color: var(--text); font-weight: 700; }
   .empty { color: var(--muted); }
+  .live { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 12px; }
+  .live .tentative { color: var(--muted); }
   .log-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 12px; }
   .log-head h2 { margin: 0; }
   .log-head button { padding: 4px 10px; font-size: 13px; }
@@ -269,6 +271,8 @@
       <h2>Conversation</h2>
       <button id="clearLog">Clear</button>
     </div>
+    <div class="live" id="live" hidden><span class="who">Hearing</span><span class="tag lang" id="liveLang" hidden></span>
+      <div><span id="liveCommitted"></span><span class="tentative" id="liveTentative"></span></div></div>
     <div class="log" id="log"><p class="empty" id="emptyLog">No conversation yet.</p></div>
   </section>
 </main>
@@ -372,7 +376,17 @@ function onEvent(e) {
   if (e.type === "state") return render(e);
   if (e.type === "personas") return renderPersonas(e, { keepForm: true });
   if (e.type === "speakers") return renderSpeakers(e.speakers);
+  if (e.type === "partial") {
+    // Live transcript while the other person is talking; grey text may still change
+    $("live").hidden = !e.committed && !e.tentative;
+    $("liveCommitted").textContent = e.committed;
+    $("liveTentative").textContent = e.tentative;
+    $("liveLang").hidden = !e.lang;
+    $("liveLang").textContent = e.lang ? LANG[e.lang] : "";
+    return;
+  }
   if (e.type === "turn_user") {
+    $("live").hidden = true;
     const el = turnEl(e.id);
     el.querySelector(".user .who").textContent = e.speaker || "Speaker";
     el.querySelector(".user .lang").textContent = e.detected ? LANG[e.detected] : "Unknown";
