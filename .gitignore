@@ -1,0 +1,17 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# 模型檔（體積大，只放本機）
+models/
+
+# 測試輸出（錄音、合成樣本、結果）
+spike/out/
+
+# .NET build 輸出
+tools/*/bin/
+tools/*/obj/
+tools/llama.cpp/
+config/
+logs/

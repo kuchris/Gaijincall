@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gaijincall 控制台</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --card: #ffffff; --text: #1d1d1f; --muted: #6b6b70; --line: #e4e2dd;
+    --accent: #2f6fde; --accent-text: #ffffff; --ok: #1f8a4c; --warn: #b26a00; --bad: #c0392b;
+    --chip: #efeee9;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141416; --card: #1f1f23; --text: #ececf0; --muted: #9a9aa3; --line: #2e2e34;
+      --accent: #5b8ff0; --accent-text: #0b0b0d; --ok: #4cc27f; --warn: #e0a040; --bad: #ef6b5b;
+      --chip: #2a2a30;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.55 "Microsoft JhengHei UI", "Noto Sans TC", system-ui, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 20px 16px 40px; display: grid; gap: 16px;
+         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  header { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 20px; margin: 0; }
+  h2 { font-size: 15px; margin: 0 0 12px; color: var(--muted); font-weight: 600; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .wide { grid-column: 1 / -1; }
+  @media (max-width: 720px) { main { grid-template-columns: 1fr; } }
+
+  .state { display: flex; align-items: center; gap: 10px; font-size: 22px; font-weight: 700; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--muted); flex: none; }
+  .state[data-s="listening"] .dot { background: var(--ok); }
+  .state[data-s="hearing"] .dot { background: var(--accent); }
+  .state[data-s="thinking"] .dot, .state[data-s="speaking"] .dot { background: var(--accent); animation: pulse 1s infinite; }
+  .state[data-s="paused"] .dot { background: var(--warn); }
+  .state[data-s="loading"] .dot { background: var(--warn); animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .sub { color: var(--muted); margin-top: 4px; min-height: 1.5em; }
+  .error { color: var(--bad); margin-top: 8px; }
+  .buttons { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  button { font: inherit; border-radius: 8px; border: 1px solid var(--line); background: var(--chip);
+           color: var(--text); padding: 9px 16px; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 700; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  kbd { font: 12px ui-monospace, monospace; background: var(--chip); border: 1px solid var(--line);
+        border-radius: 4px; padding: 1px 5px; }
+
+  .row { display: grid; gap: 6px; margin-bottom: 14px; }
+  .row:last-child { margin-bottom: 0; }
+  label.title { font-weight: 600; }
+  .hint { color: var(--muted); font-size: 13px; }
+  select, input[type=range] { width: 100%; font: inherit; }
+  select { padding: 7px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--text); }
+  .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+  .seg button { padding: 6px 12px; }
+  .seg button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  .switch { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .switch input { width: 18px; height: 18px; }
+  .monitor-opts[hidden] { display: none !important; }
+
+  .log { display: grid; gap: 10px; max-height: 60vh; overflow-y: auto; }
+  .turn { border-top: 1px solid var(--line); padding-top: 10px; }
+  .turn:first-child { border-top: 0; padding-top: 0; }
+  .who { font-weight: 700; margin-right: 6px; }
+  .ai .who { color: var(--accent); }
+  .tag { font-size: 12px; background: var(--chip); border-radius: 999px; padding: 1px 8px; margin-left: 6px; color: var(--muted); }
+  .lat { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .lat span { font-size: 12px; background: var(--chip); border-radius: 6px; padding: 2px 7px; color: var(--muted); }
+  .lat span.total { color: var(--text); font-weight: 700; }
+  .empty { color: var(--muted); }
+  .log-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .log-head h2 { margin: 0; }
+  .log-head button { padding: 4px 10px; font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Gaijincall 控制台</h1>
+    <span class="hint">本機語音助手 · 唔會儲存錄音或對話紀錄</span>
+  </header>
+
+  <section class="card">
+    <h2>狀態</h2>
+    <div class="state" id="state" data-s="loading"><span class="dot"></span><span id="stateText">載入中</span></div>
+    <div class="sub" id="stateSub"></div>
+    <div class="error" id="error" hidden></div>
+    <div class="buttons">
+      <button class="primary" id="toggle" disabled>啟用 AI 模式</button>
+      <button id="pause" disabled>暫停</button>
+    </div>
+    <p class="hint" id="hotkeyHint"></p>
+  </section>
+
+  <section class="card">
+    <h2>設定</h2>
+    <div class="row">
+      <label class="title">回覆語言</label>
+      <div class="seg" id="langSeg">
+        <button data-lang="auto">自動跟對方</button>
+        <button data-lang="yue">廣東話</button>
+        <button data-lang="cmn">普通話</button>
+        <button data-lang="ja">日文</button>
+        <button data-lang="en">英文</button>
+      </div>
+    </div>
+    <div class="row">
+      <label class="title" for="playDevice">AI 聲音送去（Discord 嘅咪要揀對應嘅虛擬裝置）</label>
+      <select id="playDevice"></select>
+    </div>
+    <div class="row">
+      <label class="switch"><input type="checkbox" id="monitorOn"> <span class="title">我都要聽到 AI 把聲</span></label>
+      <div class="monitor-opts row" id="monitorOpts" hidden>
+        <select id="monitorDevice"></select>
+        <label class="hint" for="monitorVolume">監聽音量 <span id="monitorVolumeText"></span></label>
+        <input type="range" id="monitorVolume" min="0" max="150" step="5">
+      </div>
+    </div>
+    <div class="row">
+      <label class="title" for="endMs">靜音幾耐當對方講完：<span id="endMsText"></span></label>
+      <input type="range" id="endMs" min="300" max="1500" step="50">
+      <span class="hint">越短回應越快，但對方停一停諗嘢都可能會被搶話。</span>
+    </div>
+  </section>
+
+  <section class="card wide">
+    <div class="log-head">
+      <h2>今次對話</h2>
+      <button id="clearLog">清除畫面</button>
+    </div>
+    <div class="log" id="log"><p class="empty" id="emptyLog">未有對話。</p></div>
+  </section>
+</main>
+
+<script>
+const LANG = { yue: "粵", cmn: "國", ja: "日", en: "英" };
+const STATE_TEXT = {
+  loading: "載入中", off: "未啟用", listening: "收聽中", hearing: "對方講緊嘢",
+  thinking: "諗緊點答", speaking: "AI 講緊嘢", paused: "已暫停",
+};
+let current = null;
+let defaultOutput = "";
+const $ = id => document.getElementById(id);
+
+async function post(path, body = {}) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (r.ok) render(await r.json());
+}
+
+function render(s) {
+  current = s;
+  $("state").dataset.s = s.state;
+  $("stateText").textContent = STATE_TEXT[s.state] || s.state;
+  let sub = "";
+  if (s.state === "loading") sub = s.load_step ? `${s.load_step}……` : "準備緊";
+  else if (s.enabled && s.lang) sub = `而家用${{ yue: "廣東話", cmn: "普通話", ja: "日文", en: "英文" }[s.lang]}回覆`;
+  else if (!s.enabled) sub = "撳「啟用 AI 模式」開始收聽 Discord";
+  $("stateSub").textContent = sub;
+  $("error").hidden = !s.error;
+  $("error").textContent = s.error || "";
+
+  const loading = s.state === "loading";
+  $("toggle").disabled = loading;
+  $("toggle").textContent = s.enabled ? "停止 AI 模式" : "啟用 AI 模式";
+  $("toggle").classList.toggle("primary", !s.enabled);
+  $("pause").disabled = loading || !s.enabled;
+  $("pause").textContent = s.paused ? "恢復" : "暫停";
+
+  const st = s.settings;
+  for (const b of $("langSeg").children) b.setAttribute("aria-pressed", String(b.dataset.lang === st.lang));
+  if (document.activeElement !== $("playDevice")) $("playDevice").value = st.play_device;
+  $("monitorOn").checked = st.monitor_on;
+  $("monitorOpts").hidden = !st.monitor_on;
+  if (document.activeElement !== $("monitorDevice")) $("monitorDevice").value = st.monitor_device || "";
+  if (document.activeElement !== $("monitorVolume")) $("monitorVolume").value = Math.round(st.monitor_volume * 100);
+  $("monitorVolumeText").textContent = `${Math.round(st.monitor_volume * 100)}%`;
+  if (document.activeElement !== $("endMs")) $("endMs").value = st.end_ms;
+  $("endMsText").textContent = `${(st.end_ms / 1000).toFixed(2)} 秒`;
+}
+
+async function loadDevices() {
+  const d = await (await fetch("/api/devices")).json();
+  defaultOutput = d.default_output || "";
+  const fill = (sel, withDefault) => {
+    sel.innerHTML = "";
+    if (withDefault) sel.add(new Option(`Windows 預設（${defaultOutput || "未知"}）`, ""));
+    for (const name of d.outputs) sel.add(new Option(name, name));
+  };
+  fill($("playDevice"), false);
+  fill($("monitorDevice"), true);
+  $("hotkeyHint").innerHTML = d.hotkey_ok
+    ? `全域快捷鍵 <kbd>${d.hotkey}</kbd>：暫停／恢復（喺 Discord 入面都用得）。暫停時 AI 唔會回應，你可以自己講。`
+    : `⚠ 快捷鍵 <kbd>${d.hotkey}</kbd> 註冊失敗，可能被其他程式佔用。`;
+  if (current) render(current);
+}
+
+// ---- 對話紀錄（只存喺呢個網頁，唔會儲存）----
+const turns = new Map();
+function turnEl(id) {
+  if (!turns.has(id)) {
+    $("emptyLog").hidden = true;
+    const el = document.createElement("div");
+    el.className = "turn";
+    el.innerHTML = `<div class="user"><span class="who">對方</span><span class="tag lang"></span><div class="text"></div></div>
+      <div class="ai" hidden><span class="who">AI</span><span class="tag lang"></span><span class="tag note" hidden></span><div class="text"></div></div>
+      <div class="lat"></div>`;
+    $("log").prepend(el);
+    turns.set(id, el);
+  }
+  return turns.get(id);
+}
+const LAT_LABEL = { vad: "等靜音", asr: "辨識", llm_first: "對話模型", tts_first: "合成", play: "開始播" };
+
+function onEvent(e) {
+  if (e.type === "state") return render(e);
+  if (e.type === "turn_user") {
+    const el = turnEl(e.id);
+    el.querySelector(".user .lang").textContent = e.detected ? LANG[e.detected] : "?";
+    el.querySelector(".user .text").textContent = e.text;
+    el.querySelector(".ai .lang").textContent = LANG[e.reply_lang];
+  } else if (e.type === "turn_reply") {
+    const el = turnEl(e.id), ai = el.querySelector(".ai");
+    ai.hidden = !e.text && !e.interrupted;
+    ai.querySelector(".text").textContent = e.text || "";
+    if (e.done) {
+      const note = ai.querySelector(".note");
+      note.hidden = !e.interrupted;
+      note.textContent = "被打斷";
+      const lat = el.querySelector(".lat");
+      lat.innerHTML = "";
+      for (const [k, label] of Object.entries(LAT_LABEL))
+        if (e.latency && k in e.latency) lat.insertAdjacentHTML("beforeend", `<span>${label} ${e.latency[k]} ms</span>`);
+      if (e.latency && e.latency.total)
+        lat.insertAdjacentHTML("beforeend", `<span class="total">對方停口 → AI 出聲 ${(e.latency.total / 1000).toFixed(2)} 秒（未計虛擬咪同 Discord 傳送）</span>`);
+    }
+  } else if (e.type === "turn_error") {
+    const el = turnEl(e.id);
+    el.querySelector(".lat").innerHTML = `<span style="color:var(--bad)">出錯：${e.error}</span>`;
+  }
+}
+
+function connect() {
+  const es = new EventSource("/events");
+  es.onmessage = m => onEvent(JSON.parse(m.data));
+  es.onerror = () => { es.close(); setTimeout(connect, 1500); };
+}
+
+$("toggle").onclick = () => post(current && current.enabled ? "/api/disable" : "/api/enable");
+$("pause").onclick = () => post("/api/pause", { paused: !(current && current.paused) });
+$("langSeg").onclick = e => { if (e.target.dataset.lang) post("/api/settings", { lang: e.target.dataset.lang }); };
+$("playDevice").onchange = e => post("/api/settings", { play_device: e.target.value });
+$("monitorOn").onchange = e => post("/api/settings", { monitor_on: e.target.checked });
+$("monitorDevice").onchange = e => post("/api/settings", { monitor_device: e.target.value || null });
+$("monitorVolume").oninput = e => { $("monitorVolumeText").textContent = `${e.target.value}%`; };
+$("monitorVolume").onchange = e => post("/api/settings", { monitor_volume: e.target.value / 100 });
+$("endMs").oninput = e => { $("endMsText").textContent = `${(e.target.value / 1000).toFixed(2)} 秒`; };
+$("endMs").onchange = e => post("/api/settings", { end_ms: Number(e.target.value) });
+$("clearLog").onclick = () => { turns.clear(); $("log").replaceChildren($("emptyLog")); $("emptyLog").hidden = false; };
+
+loadDevices();
+connect();
+</script>
+</body>
+</html>

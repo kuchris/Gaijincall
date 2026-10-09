@@ -1,0 +1,14 @@
+[
+  {"id": "yue-1", "lang": "yue", "voice": "Microsoft Tracy Desktop", "text": "喂，你好呀，我想問吓你今晚得唔得閒一齊食飯？"},
+  {"id": "yue-2", "lang": "yue", "voice": "Microsoft Tracy Desktop", "text": "唔好意思，我頭先冇聽清楚，你可唔可以講多一次？"},
+  {"id": "yue-3", "lang": "yue", "voice": "Microsoft Tracy Desktop", "text": "今日好熱呀，我哋不如去商場行吓啦。"},
+  {"id": "cmn-1", "lang": "cmn", "voice": "Microsoft Hanhan Desktop", "text": "你好，請問你明天下午有空嗎？我們可以一起開會。"},
+  {"id": "cmn-2", "lang": "cmn", "voice": "Microsoft Hanhan Desktop", "text": "不好意思，剛才網絡有點卡，你能再說一遍嗎？"},
+  {"id": "cmn-3", "lang": "cmn", "voice": "Microsoft Hanhan Desktop", "text": "這家餐廳的菜很好吃，下次我帶你去。"},
+  {"id": "ja-1", "lang": "ja", "voice": "Microsoft Haruka Desktop", "text": "もしもし、今週の土曜日は空いていますか？"},
+  {"id": "ja-2", "lang": "ja", "voice": "Microsoft Haruka Desktop", "text": "すみません、もう一度ゆっくり言っていただけますか？"},
+  {"id": "ja-3", "lang": "ja", "voice": "Microsoft Haruka Desktop", "text": "駅の近くに新しいラーメン屋ができたそうですよ。"},
+  {"id": "en-1", "lang": "en", "voice": "Microsoft Zira Desktop", "text": "Hey, are you free this weekend? We could grab some coffee."},
+  {"id": "en-2", "lang": "en", "voice": "Microsoft Zira Desktop", "text": "Sorry, the connection dropped for a second. Could you say that again?"},
+  {"id": "en-3", "lang": "en", "voice": "Microsoft Zira Desktop", "text": "I just moved to Tokyo last month, so everything still feels new."}
+]

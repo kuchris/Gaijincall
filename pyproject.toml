@@ -1,0 +1,31 @@
+[project]
+name = "gaijincall"
+version = "0.1.0"
+description = "本機多語言 Discord 語音對話助手"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "numpy>=2.0",
+    "sounddevice>=0.5",
+    "soundfile>=0.12",
+]
+
+[tool.uv]
+package = false
+
+[project.optional-dependencies]
+asr = [
+    "torch>=2.8",
+    "transformers>=5.13.0",
+    "accelerate>=1.0",
+    "librosa>=0.10",
+    "opencc-python-reimplemented>=0.1.7",
+    "silero-vad>=6.2.3",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
